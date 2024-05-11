@@ -1,0 +1,269 @@
+/* The major aim of this project is to gain insight into the sales data of Amazon to understand the different factors 
+that affect sales of the different branches.*/
+/*This dataset contains sales transactions from three different branches of Amazon, respectively located in Mandalay,
+ Yangon and Naypyitaw. The data contains 17 columns and 1000 rows: */
+
+/* Checking for Null values */
+
+USE amazon;
+SELECT * FROM sales
+WHERE COALESCE(invoice_id, branch, city, customer_type, gender, product_line, unit_price, quantity, VAT, total, Date_, Time_, payment_method, cogs, gross_margin_percentage, gross_income, rating) IS NULL;
+
+/* Adding new column timeofday to give insight of sales in the Morning, Afternoon and Evening. 
+This will help us to answer the question on which part of the day most sales are made. */
+
+ALTER TABLE sales
+ADD COLUMN timeofday VARCHAR(10);
+UPDATE sales
+SET timeofday = 
+    CASE 
+        WHEN TIME(Time_) BETWEEN '00:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN TIME(Time_) BETWEEN '12:00:00' AND '17:59:59' THEN 'Afternoon'
+        WHEN TIME(Time_) BETWEEN '18:00:00' AND '23:59:59' THEN 'Evening'
+        ELSE 'Unknown'
+    END;
+ 
+ /* Adding a new column named dayname that contains the extracted days of the week on which the given transaction 
+ took place (Mon, Tue, Wed, Thur, Fri). This will help us answer the question on which week of the day each branch is busiest. */
+    
+ALTER TABLE sales
+ADD COLUMN dayname VARCHAR(10);
+UPDATE sales
+SET dayname = DAYNAME(Date_);
+
+
+/* Adding a new column named monthname that contains the extracted months of the year on which the given 
+ transaction took place (Jan, Feb, Mar). This will Help us to determine which month of the year has the most sales and profit. */
+ 
+USE amazon;
+ALTER TABLE sales
+ADD COLUMN monthname VARCHAR(10);
+UPDATE sales
+SET monthname = MONTHNAME(Date_);
+
+/* Q1. What is the count of distinct cities in the dataset? */ 
+
+SELECT count(distinct(city)) FROM sales;
+
+/* Q2. For each branch, what is the corresponding city?  */
+
+USE amazon;
+SELECT branch, city
+FROM sales
+GROUP BY branch, city;
+
+/* Q3. What is the count of distinct product lines in the dataset?  */
+
+SELECT count(distinct(product_line)) FROM sales;
+
+
+/*  Q4. Which payment method occurs most frequently? */
+
+SELECT payment_method, COUNT(*) AS frequency FROM sales
+GROUP BY payment_method
+ORDER BY frequency DESC
+LIMIT 1;
+
+/* Q5.  Which product line has the highest sales?  */
+
+SELECT product_line, SUM(total) AS total_sales FROM sales
+GROUP BY product_line
+ORDER BY total_sales DESC
+LIMIT 1;
+
+/* Q6. How much revenue is generated each month? */
+
+SELECT monthname, YEAR(Date_) AS year, SUM(total) AS revenue FROM sales
+GROUP BY year, monthname
+ORDER BY year, monthname;
+
+/* Q7. In which month did the cost of goods sold reach its peak? */
+
+SELECT monthname, YEAR(Date_) AS year, SUM(cogs) AS total_cogs FROM sales
+GROUP BY year, monthname
+ORDER BY total_cogs DESC
+LIMIT 1;
+
+/* Q8. Which product line generated the highest revenue? */
+
+SELECT product_line, SUM(total) AS total_revenue FROM sales
+GROUP BY product_line
+ORDER BY total_revenue DESC
+LIMIT 1;
+
+/* Q9. In which city was the highest revenue recorded? */
+
+SELECT city, SUM(total) AS total_revenue FROM sales
+GROUP BY city
+ORDER BY total_revenue DESC
+LIMIT 1;
+
+
+/* Q.10 Which product line incurred the highest Value Added Tax? */
+
+SELECT product_line, SUM(VAT) AS total_VAT FROM sales
+GROUP BY product_line
+ORDER BY total_VAT DESC
+LIMIT 1;
+
+/* Q.11 For each product line, add a column indicating "Good" if its sales are above average, otherwise "Bad." */
+
+SELECT *,
+    CASE
+        WHEN total > avg_sales_per_product_line THEN 'Good'
+        ELSE 'Bad'
+    END AS sales_category
+FROM (
+    SELECT *,
+        AVG(total) OVER (PARTITION BY product_line) AS avg_sales_per_product_line
+    FROM sales
+) AS subquery;
+
+
+/* Q12.  Identify the branch that exceeded the average number of products sold.  */
+
+SELECT branch, AVG(quantity) AS avg_quantity_per_branch FROM sales
+GROUP BY branch;
+
+
+/* Q13.  Which product line is most frequently associated with each gender? */
+
+SELECT gender, product_line, COUNT(*) AS frequency FROM sales
+GROUP BY gender, product_line
+ORDER BY gender, frequency DESC;
+
+/* Q14. Calculate the average rating for each product line. */
+
+SELECT product_line, AVG(rating) AS average_rating
+FROM sales
+GROUP BY product_line;
+
+/* Q15. Count the sales occurrences for each time of day on every weekday. */
+
+SELECT 
+    dayname AS weekday,
+    CASE 
+        WHEN TIME(Time_) BETWEEN '00:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN TIME(Time_) BETWEEN '12:00:00' AND '17:59:59' THEN 'Afternoon'
+        WHEN TIME(Time_) BETWEEN '18:00:00' AND '23:59:59' THEN 'Evening'
+    END AS time_of_day,
+    COUNT(*) AS sales_occurrences
+FROM sales
+GROUP BY dayname, time_of_day
+ORDER BY FIELD(dayname, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'), 
+         FIELD(time_of_day, 'Morning', 'Afternoon', 'Evening');
+
+
+/*  Q16. Identify the customer type contributing the highest revenue. */
+
+SELECT customer_type, SUM(total) AS total_revenue
+FROM sales
+GROUP BY customer_type
+ORDER BY total_revenue DESC
+LIMIT 1;
+
+/*  Q17. Determine the city with the highest VAT percentage. */
+
+SELECT city, (SUM(VAT) / SUM(total)) * 100 AS vat_percentage FROM sales
+GROUP BY city
+ORDER BY vat_percentage DESC
+LIMIT 1;
+
+/* Q18. Identify the customer type with the highest VAT payments. */
+
+SELECT customer_type, SUM(VAT) AS total_VAT_payments
+FROM sales
+GROUP BY customer_type
+ORDER BY total_VAT_payments DESC
+LIMIT 1;
+
+/*  Q19. What is the count of distinct customer types in the dataset? */
+
+SELECT COUNT(DISTINCT customer_type) AS distinct_customer_types_count
+FROM sales;
+
+
+/* Q20. What is the count of distinct payment methods in the dataset? */
+
+SELECT COUNT(DISTINCT payment_method) AS distinct_payment_methods_count FROM sales;
+
+/* Q21. Which customer type occurs most frequently? */
+
+SELECT customer_type, COUNT(*) AS frequency
+FROM sales
+GROUP BY customer_type
+ORDER BY frequency DESC
+LIMIT 1;
+
+/* Q22. Identify the customer type with the highest purchase frequency. */
+
+SELECT customer_type, COUNT(*) AS purchase_frequency FROM sales
+GROUP BY customer_type
+ORDER BY purchase_frequency DESC
+LIMIT 1;
+
+
+/* Q23. Determine the predominant gender among customers.  */
+
+SELECT gender, COUNT(*) AS frequency
+FROM sales
+GROUP BY gender
+ORDER BY frequency DESC
+LIMIT 1;
+
+
+/*  Q24. Examine the distribution of genders within each branch. */
+
+SELECT branch, gender, COUNT(*) AS gender_count
+FROM sales
+GROUP BY branch, gender
+ORDER BY branch, gender;
+
+/*  Q25.Identify the time of day when customers provide the most ratings. */
+
+SELECT 
+    CASE 
+        WHEN TIME(Time_) BETWEEN '00:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN TIME(Time_) BETWEEN '12:00:00' AND '17:59:59' THEN 'Afternoon'
+        WHEN TIME(Time_) BETWEEN '18:00:00' AND '23:59:59' THEN 'Evening'
+    END AS time_of_day,
+    COUNT(*) AS rating_count
+FROM sales
+GROUP BY time_of_day
+ORDER BY rating_count DESC
+LIMIT 1;
+
+/*  Q26. Determine the time of day with the highest customer ratings for each branch. */
+
+SELECT 
+    branch,
+    CASE 
+        WHEN TIME(Time_) BETWEEN '00:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN TIME(Time_) BETWEEN '12:00:00' AND '17:59:59' THEN 'Afternoon'
+        WHEN TIME(Time_) BETWEEN '18:00:00' AND '23:59:59' THEN 'Evening'
+    END AS time_of_day,
+    COUNT(*) AS rating_count
+FROM sales
+GROUP BY branch, time_of_day
+ORDER BY branch, rating_count DESC;
+
+
+/* Q27. Identify the day of the week with the highest average ratings. */
+
+SELECT 
+    DAYNAME(Date_) AS day_of_week,
+    AVG(rating) AS average_rating
+FROM sales
+GROUP BY day_of_week
+ORDER BY average_rating DESC
+LIMIT 1;
+
+/* Q28. Determine the day of the week with the highest average ratings for each branch. */
+
+SELECT 
+    branch,
+    DAYNAME(Date_) AS day_of_week,
+    AVG(rating) AS average_rating
+FROM sales
+GROUP BY branch, day_of_week
+ORDER BY branch, average_rating DESC;
